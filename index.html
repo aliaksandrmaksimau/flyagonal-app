@@ -283,7 +283,10 @@
             
             const date = new Date();
             const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-            const label = `${underlying} (Qty: ${payload.order_A.qty}) - Sent at ${timeStr}`;
+            
+            // Dynamic Qty extraction based on which sides are present
+            const qty = payload.order_A ? payload.order_A.qty : (payload.order_B ? payload.order_B.qty : 1);
+            const label = `${underlying} (Qty: ${qty}) - Sent at ${timeStr}`;
 
             const historyItem = { label: label, payload: payload };
             
@@ -333,25 +336,49 @@
         }
 
         function populateForm(payload) {
-            document.getElementById('global_qty').value = payload.order_A.qty;
-            
-            if (payload.order_A.legs && payload.order_A.legs.length > 0) {
-                document.getElementById('global_underlying').value = payload.order_A.legs[0].underlying;
+            let globalQty = 1;
+            let underlying = 'SPY';
+
+            // Extract globals based on available sides
+            if (payload.order_A) {
+                globalQty = payload.order_A.qty;
+                if (payload.order_A.legs && payload.order_A.legs.length > 0) underlying = payload.order_A.legs[0].underlying;
+            } else if (payload.order_B) {
+                globalQty = payload.order_B.qty;
+                if (payload.order_B.legs && payload.order_B.legs.length > 0) underlying = payload.order_B.legs[0].underlying;
             }
 
-            document.getElementById('price_A').value = payload.order_A.target_mid_price;
-            document.getElementById('price_B').value = payload.order_B.target_mid_price;
+            document.getElementById('global_qty').value = globalQty;
+            document.getElementById('global_underlying').value = underlying;
+            
+            // Populate Side A if it exists
+            if (payload.order_A) {
+                document.getElementById('price_A').value = payload.order_A.target_mid_price;
+            } else {
+                document.getElementById('price_A').value = '';
+            }
+
+            // Populate Side B if it exists
+            if (payload.order_B) {
+                document.getElementById('price_B').value = payload.order_B.target_mid_price;
+            } else {
+                document.getElementById('price_B').value = '';
+            }
 
             document.getElementById('legs_A').innerHTML = '';
             document.getElementById('legs_B').innerHTML = '';
 
-            payload.order_A.legs.forEach(leg => {
-                addLeg('A', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
-            });
+            if (payload.order_A && payload.order_A.legs) {
+                payload.order_A.legs.forEach(leg => {
+                    addLeg('A', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
+                });
+            }
 
-            payload.order_B.legs.forEach(leg => {
-                addLeg('B', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
-            });
+            if (payload.order_B && payload.order_B.legs) {
+                payload.order_B.legs.forEach(leg => {
+                    addLeg('B', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
+                });
+            }
         }
 
         function loadDefaults() {
@@ -386,18 +413,12 @@
                 return;
             }
             
-            const priceAStr = document.getElementById('price_A').value;
-            const priceBStr = document.getElementById('price_B').value;
-            if (priceAStr === '' || priceBStr === '') {
-                tg.showAlert("Please enter valid Target Limit Prices for both sides.");
-                return;
-            }
-
             const legsA = collectLegs('A');
             const legsB = collectLegs('B');
 
-            if (legsA.length === 0 || legsB.length === 0) {
-                tg.showAlert("Both Side A and Side B must have at least one leg.");
+            // --- NEW: Dynamic Validation (Allowing just one side) ---
+            if (legsA.length === 0 && legsB.length === 0) {
+                tg.showAlert("You must have at least one leg in either Side A or Side B.");
                 return;
             }
 
@@ -413,18 +434,33 @@
                 return;
             }
 
-            const payload = {
-                order_A: {
+            const payload = {};
+            
+            if (legsA.length > 0) {
+                const priceAStr = document.getElementById('price_A').value;
+                if (priceAStr === '') {
+                    tg.showAlert("Please enter a Target Limit Price for Side A.");
+                    return;
+                }
+                payload.order_A = {
                     qty: globalQty,
                     target_mid_price: parseFloat(priceAStr),
                     legs: legsA
-                },
-                order_B: {
+                };
+            }
+            
+            if (legsB.length > 0) {
+                const priceBStr = document.getElementById('price_B').value;
+                if (priceBStr === '') {
+                    tg.showAlert("Please enter a Target Limit Price for Side B.");
+                    return;
+                }
+                payload.order_B = {
                     qty: globalQty,
                     target_mid_price: parseFloat(priceBStr),
                     legs: legsB
-                }
-            };
+                };
+            }
 
             saveToHistory(payload);
             tg.sendData(JSON.stringify(payload));
