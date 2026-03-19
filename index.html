@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Flyagonal Entry</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: var(--tg-theme-bg-color, #ffffff);
+            --text-color: var(--tg-theme-text-color, #000000);
+            --hint-color: var(--tg-theme-hint-color, #999999);
+            --link-color: var(--tg-theme-link-color, #2481cc);
+            --button-color: var(--tg-theme-button-color, #5288c1);
+            --button-text-color: var(--tg-theme-button-text-color, #ffffff);
+            --secondary-bg-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            --border-color: #e0e0e0;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --border-color: #333333;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 16px;
+            padding-bottom: 80px; 
+            box-sizing: border-box;
+        }
+
+        h2 { margin-top: 0; font-size: 18px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+        h3 { font-size: 16px; margin: 16px 0 8px 0; color: var(--button-color); }
+        
+        .section {
+            background-color: var(--secondary-bg-color);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .col { flex: 1; }
+        
+        label {
+            display: block;
+            font-size: 12px;
+            color: var(--hint-color);
+            margin-bottom: 4px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            box-sizing: border-box;
+            font-size: 14px;
+            appearance: none;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--button-color);
+        }
+
+        .leg-container {
+            border-left: 3px solid var(--button-color);
+            padding-left: 10px;
+            margin-bottom: 12px;
+            position: relative;
+        }
+
+        .remove-leg {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: none;
+            border: none;
+            color: #ff3b30;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .add-btn {
+            background-color: transparent;
+            color: var(--button-color);
+            border: 1px dashed var(--button-color);
+            padding: 8px;
+            width: 100%;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+
+        /* Utility classes */
+        .flex-2 { flex: 2; }
+        .flex-3 { flex: 3; }
+    </style>
+</head>
+<body>
+
+    <div class="section">
+        <h2>⚙️ Global Settings</h2>
+        <div class="row">
+            <div class="col flex-2">
+                <label>Underlying Asset</label>
+                <input type="text" id="global_underlying" value="SPY" style="text-transform: uppercase;">
+            </div>
+            <div class="col flex-2">
+                <label>Total Qty</label>
+                <input type="number" id="global_qty" value="3" min="1">
+            </div>
+        </div>
+    </div>
+
+    <div class="section" id="section_A">
+        <h3>🦋 Side A (Butterfly)</h3>
+        <div class="row">
+            <div class="col">
+                <label>Target Limit Price ($)</label>
+                <input type="number" id="price_A" value="1.34" step="0.01">
+            </div>
+        </div>
+        <div id="legs_A"></div>
+        <button class="add-btn" onclick="addLeg('A')">➕ ADD LEG TO SIDE A</button>
+    </div>
+
+    <div class="section" id="section_B">
+        <h3>📐 Side B (Diagonal)</h3>
+        <div class="row">
+            <div class="col">
+                <label>Target Limit Price ($)</label>
+                <input type="number" id="price_B" value="0.87" step="0.01">
+            </div>
+        </div>
+        <div id="legs_B"></div>
+        <button class="add-btn" onclick="addLeg('B')">➕ ADD LEG TO SIDE B</button>
+    </div>
+
+    <template id="leg-template">
+        <div class="leg-container">
+            <button class="remove-leg" onclick="this.parentElement.remove()">✖</button>
+            <div class="row" style="padding-right: 24px;">
+                <div class="col flex-2">
+                    <label>Action</label>
+                    <select class="leg-side">
+                        <option value="BUY">BUY</option>
+                        <option value="SELL">SELL</option>
+                    </select>
+                </div>
+                <div class="col flex-2">
+                    <label>Ratio Qty</label>
+                    <input type="number" class="leg-ratio" value="1" min="1">
+                </div>
+            </div>
+            <div class="row">
+                <div class="col flex-3">
+                    <label>Expiration</label>
+                    <input type="date" class="leg-exp">
+                </div>
+                <div class="col flex-2">
+                    <label>Type</label>
+                    <select class="leg-type">
+                        <option value="C">Call (C)</option>
+                        <option value="P">Put (P)</option>
+                    </select>
+                </div>
+                <div class="col flex-2">
+                    <label>Strike</label>
+                    <input type="number" class="leg-strike" step="1">
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); 
+        
+        tg.MainButton.setText("SEND SIGNAL");
+        tg.MainButton.show();
+        
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        function addLeg(side, defaultSide = 'BUY', defaultRatio = 1, defaultType = 'C', defaultStrike = '') {
+            const container = document.getElementById(`legs_${side}`);
+            const template = document.getElementById('leg-template').content.cloneNode(true);
+            
+            template.querySelector('.leg-side').value = defaultSide;
+            template.querySelector('.leg-ratio').value = defaultRatio;
+            template.querySelector('.leg-type').value = defaultType;
+            template.querySelector('.leg-strike').value = defaultStrike;
+            template.querySelector('.leg-exp').value = todayStr;
+            
+            container.appendChild(template);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return "";
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return dateStr;
+            return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+
+        function collectLegs(side) {
+            const container = document.getElementById(`legs_${side}`);
+            const legElements = container.querySelectorAll('.leg-container');
+            const legs = [];
+            const underlying = document.getElementById('global_underlying').value.toUpperCase().trim();
+
+            legElements.forEach(el => {
+                legs.push({
+                    underlying: underlying,
+                    expiration: formatDate(el.querySelector('.leg-exp').value),
+                    type: el.querySelector('.leg-type').value,
+                    strike: parseFloat(el.querySelector('.leg-strike').value),
+                    ratio_qty: parseInt(el.querySelector('.leg-ratio').value),
+                    side: el.querySelector('.leg-side').value
+                });
+            });
+            return legs;
+        }
+
+        tg.MainButton.onClick(() => {
+            const underlying = document.getElementById('global_underlying').value.trim();
+            const globalQty = parseFloat(document.getElementById('global_qty').value);
+            
+            if (!underlying || isNaN(globalQty)) {
+                tg.showAlert("Please fill in Global Settings properly.");
+                return;
+            }
+
+            const legsA = collectLegs('A');
+            const legsB = collectLegs('B');
+
+            if (legsA.length === 0 || legsB.length === 0) {
+                tg.showAlert("Both Side A and Side B must have at least one leg.");
+                return;
+            }
+
+            // Check if any strike is empty
+            const hasEmptyStrike = [...legsA, ...legsB].some(l => isNaN(l.strike));
+            if (hasEmptyStrike) {
+                tg.showAlert("Please ensure all legs have a valid Strike price.");
+                return;
+            }
+
+            const payload = {
+                order_A: {
+                    qty: globalQty,
+                    target_mid_price: parseFloat(document.getElementById('price_A').value),
+                    legs: legsA
+                },
+                order_B: {
+                    qty: globalQty,
+                    target_mid_price: parseFloat(document.getElementById('price_B').value),
+                    legs: legsB
+                }
+            };
+
+            // Send data back to Telegram bot
+            tg.sendData(JSON.stringify(payload));
+        });
+
+        // Initialize default Flyagonal structure
+        addLeg('A', 'BUY', 1, 'C', 667);
+        addLeg('A', 'SELL', 2, 'C', 673);
+        addLeg('A', 'BUY', 1, 'C', 680);
+
+        addLeg('B', 'SELL', 1, 'P', 664);
+        addLeg('B', 'BUY', 1, 'P', 663);
+    </script>
+</body>
+</html>
