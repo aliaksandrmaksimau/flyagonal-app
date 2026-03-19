@@ -107,9 +107,15 @@
             margin-top: 4px;
         }
 
-        /* Utility classes */
         .flex-2 { flex: 2; }
         .flex-3 { flex: 3; }
+        
+        #history_select {
+            background-color: rgba(82, 136, 193, 0.1);
+            border-color: var(--button-color);
+            color: var(--text-color);
+            font-weight: bold;
+        }
         
         .reset-btn {
             background-color: transparent;
@@ -125,6 +131,11 @@
     </style>
 </head>
 <body>
+
+    <div class="section" id="history_section" style="display: none;">
+        <label>📂 Recent Templates (Last 3)</label>
+        <select id="history_select" onchange="applyHistory(this.value)"></select>
+    </div>
 
     <div class="section">
         <h2>⚙️ Global Settings</h2>
@@ -145,7 +156,7 @@
         <div class="row">
             <div class="col">
                 <label>Target Limit Price ($)</label>
-                <input type="number" id="price_A" value="1.34" step="0.01">
+                <input type="number" id="price_A" value="" step="0.01" placeholder="e.g. 1.34">
             </div>
         </div>
         <div id="legs_A"></div>
@@ -157,14 +168,14 @@
         <div class="row">
             <div class="col">
                 <label>Target Limit Price ($)</label>
-                <input type="number" id="price_B" value="0.87" step="0.01">
+                <input type="number" id="price_B" value="" step="0.01" placeholder="e.g. 0.87">
             </div>
         </div>
         <div id="legs_B"></div>
         <button class="add-btn" onclick="addLeg('B')">➕ ADD LEG TO SIDE B</button>
     </div>
 
-    <button class="reset-btn" onclick="resetToDefaults()">Reset to Default Template</button>
+    <button class="reset-btn" onclick="resetToDefaults()">Reset to Default Empty Template</button>
 
     <template id="leg-template">
         <div class="leg-container">
@@ -196,7 +207,7 @@
                 </div>
                 <div class="col flex-2">
                     <label>Strike</label>
-                    <input type="number" class="leg-strike" step="1">
+                    <input type="number" class="leg-strike" step="1" placeholder="...">
                 </div>
             </div>
         </div>
@@ -208,11 +219,8 @@
         
         tg.MainButton.setText("SEND SIGNAL");
         tg.MainButton.show();
-        
-        const todayStr = new Date().toISOString().split('T')[0];
 
-        // Modified addLeg to accept an existing date (for restoring state)
-        function addLeg(side, defaultSide = 'BUY', defaultRatio = 1, defaultType = 'C', defaultStrike = '', defaultExp = null) {
+        function addLeg(side, defaultSide = 'BUY', defaultRatio = 1, defaultType = 'C', defaultStrike = '', defaultExp = '') {
             const container = document.getElementById(`legs_${side}`);
             const template = document.getElementById('leg-template').content.cloneNode(true);
             
@@ -221,8 +229,7 @@
             template.querySelector('.leg-type').value = defaultType;
             template.querySelector('.leg-strike').value = defaultStrike;
             
-            // Handle date conversion (JSON uses DD.MM.YYYY, HTML5 picker needs YYYY-MM-DD)
-            let expValue = todayStr;
+            let expValue = '';
             if (defaultExp) {
                 const parts = defaultExp.split('.');
                 if (parts.length === 3) {
@@ -261,70 +268,114 @@
             });
             return legs;
         }
-
-        // --- NEW: STATE MANAGEMENT ---
-        function saveState(payload) {
-            const underlying = document.getElementById('global_underlying').value.trim();
-            localStorage.setItem('flyagonal_last_payload', JSON.stringify(payload));
-            localStorage.setItem('flyagonal_last_underlying', underlying);
+        
+        function getHistory() {
+            try {
+                return JSON.parse(localStorage.getItem('flyagonal_history') || '[]');
+            } catch (e) {
+                return [];
+            }
         }
 
-        function loadState() {
-            const savedPayloadStr = localStorage.getItem('flyagonal_last_payload');
-            const savedUnderlying = localStorage.getItem('flyagonal_last_underlying');
+        function saveToHistory(payload) {
+            let history = getHistory();
+            const underlying = document.getElementById('global_underlying').value.trim().toUpperCase();
+            
+            const date = new Date();
+            const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            const label = `${underlying} (Qty: ${payload.order_A.qty}) - Sent at ${timeStr}`;
 
-            if (savedUnderlying) {
-                document.getElementById('global_underlying').value = savedUnderlying;
+            const historyItem = { label: label, payload: payload };
+            
+            history.unshift(historyItem);
+            
+            if (history.length > 3) {
+                history = history.slice(0, 3);
             }
-
-            if (savedPayloadStr) {
-                try {
-                    const payload = JSON.parse(savedPayloadStr);
-                    
-                    document.getElementById('global_qty').value = payload.order_A.qty;
-                    document.getElementById('price_A').value = payload.order_A.target_mid_price;
-                    document.getElementById('price_B').value = payload.order_B.target_mid_price;
-
-                    document.getElementById('legs_A').innerHTML = '';
-                    document.getElementById('legs_B').innerHTML = '';
-
-                    payload.order_A.legs.forEach(leg => {
-                        addLeg('A', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
-                    });
-
-                    payload.order_B.legs.forEach(leg => {
-                        addLeg('B', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
-                    });
-                    return true;
-                } catch (e) {
-                    console.error("Error restoring state", e);
-                }
-            }
-            return false;
+            
+            localStorage.setItem('flyagonal_history', JSON.stringify(history));
+            renderHistoryDropdown();
         }
 
-        function loadDefaults() {
-            document.getElementById('global_qty').value = 3;
-            document.getElementById('price_A').value = 1.34;
-            document.getElementById('price_B').value = 0.87;
+        function renderHistoryDropdown() {
+            const history = getHistory();
+            const section = document.getElementById('history_section');
+            const select = document.getElementById('history_select');
+            
+            if (history.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            
+            section.style.display = 'block';
+            select.innerHTML = '<option value="-1">--- Default Empty Template ---</option>';
+            
+            history.forEach((item, index) => {
+                const prefix = index === 0 ? '🟢 LATEST: ' : '🕒 ';
+                select.innerHTML += `<option value="${index}">${prefix}${item.label}</option>`;
+            });
+            
+            select.value = "0";
+        }
+
+        function applyHistory(indexStr) {
+            const index = parseInt(indexStr);
+            if (index === -1) {
+                loadDefaults();
+                return;
+            }
+            
+            const history = getHistory();
+            const item = history[index];
+            if (item && item.payload) {
+                populateForm(item.payload);
+            }
+        }
+
+        function populateForm(payload) {
+            document.getElementById('global_qty').value = payload.order_A.qty;
+            
+            if (payload.order_A.legs && payload.order_A.legs.length > 0) {
+                document.getElementById('global_underlying').value = payload.order_A.legs[0].underlying;
+            }
+
+            document.getElementById('price_A').value = payload.order_A.target_mid_price;
+            document.getElementById('price_B').value = payload.order_B.target_mid_price;
+
             document.getElementById('legs_A').innerHTML = '';
             document.getElementById('legs_B').innerHTML = '';
 
-            addLeg('A', 'BUY', 1, 'C', 667);
-            addLeg('A', 'SELL', 2, 'C', 673);
-            addLeg('A', 'BUY', 1, 'C', 680);
+            payload.order_A.legs.forEach(leg => {
+                addLeg('A', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
+            });
 
-            addLeg('B', 'SELL', 1, 'P', 664);
-            addLeg('B', 'BUY', 1, 'P', 663);
+            payload.order_B.legs.forEach(leg => {
+                addLeg('B', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
+            });
+        }
+
+        function loadDefaults() {
+            document.getElementById('global_underlying').value = 'SPY';
+            document.getElementById('global_qty').value = 3;
+            document.getElementById('price_A').value = '';
+            document.getElementById('price_B').value = '';
+            document.getElementById('legs_A').innerHTML = '';
+            document.getElementById('legs_B').innerHTML = '';
+
+            addLeg('A', 'BUY', 1, 'C', '', '');
+            addLeg('A', 'SELL', 2, 'C', '', '');
+            addLeg('A', 'BUY', 1, 'C', '', '');
+
+            addLeg('B', 'SELL', 1, 'P', '', '');
+            addLeg('B', 'BUY', 1, 'P', '', '');
         }
 
         function resetToDefaults() {
-            if(confirm("Clear current form and restore default template?")) {
-                localStorage.removeItem('flyagonal_last_payload');
+            if(confirm("Clear current form and restore default empty template?")) {
+                document.getElementById('history_select').value = "-1";
                 loadDefaults();
             }
         }
-        // -----------------------------
 
         tg.MainButton.onClick(() => {
             const underlying = document.getElementById('global_underlying').value.trim();
@@ -332,6 +383,13 @@
             
             if (!underlying || isNaN(globalQty)) {
                 tg.showAlert("Please fill in Global Settings properly.");
+                return;
+            }
+            
+            const priceAStr = document.getElementById('price_A').value;
+            const priceBStr = document.getElementById('price_B').value;
+            if (priceAStr === '' || priceBStr === '') {
+                tg.showAlert("Please enter valid Target Limit Prices for both sides.");
                 return;
             }
 
@@ -348,30 +406,38 @@
                 tg.showAlert("Please ensure all legs have a valid Strike price.");
                 return;
             }
+            
+            const hasEmptyDate = [...legsA, ...legsB].some(l => !l.expiration || l.expiration.trim() === "");
+            if (hasEmptyDate) {
+                tg.showAlert("Please ensure all legs have a valid Expiration Date selected.");
+                return;
+            }
 
             const payload = {
                 order_A: {
                     qty: globalQty,
-                    target_mid_price: parseFloat(document.getElementById('price_A').value),
+                    target_mid_price: parseFloat(priceAStr),
                     legs: legsA
                 },
                 order_B: {
                     qty: globalQty,
-                    target_mid_price: parseFloat(document.getElementById('price_B').value),
+                    target_mid_price: parseFloat(priceBStr),
                     legs: legsB
                 }
             };
 
-            // Save to phone memory before sending
-            saveState(payload);
-
-            // Send data back to Telegram bot
+            saveToHistory(payload);
             tg.sendData(JSON.stringify(payload));
         });
 
         // App Initialization
-        if (!loadState()) {
-            loadDefaults(); // Only load defaults if nothing was saved previously
+        const history = getHistory();
+        renderHistoryDropdown();
+        
+        if (history.length > 0) {
+            applyHistory(0);
+        } else {
+            loadDefaults();
         }
     </script>
 </body>
