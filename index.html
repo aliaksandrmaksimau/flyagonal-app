@@ -216,8 +216,6 @@
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-
-        const BACKEND_URL = new URLSearchParams(window.location.search).get('api') || '';
         
         tg.MainButton.setText("SEND SIGNAL");
         tg.MainButton.show();
@@ -403,7 +401,7 @@
             }
         }
 
-        tg.MainButton.onClick(async () => {
+        tg.MainButton.onClick(() => {
             const underlying = document.getElementById('global_underlying').value.trim();
             const globalQty = parseFloat(document.getElementById('global_qty').value);
             
@@ -462,38 +460,7 @@
             }
 
             saveToHistory(payload);
-
-            if (!BACKEND_URL) {
-                tg.showAlert("Backend URL not configured. Add ?api=https://your-backend to the WEB_APP_URL in .env");
-                return;
-            }
-
-            tg.MainButton.setText("SENDING…");
-            tg.MainButton.disable();
-
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/signal`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tg.initData,
-                    },
-                    body: JSON.stringify(payload),
-                });
-
-                if (response.ok) {
-                    tg.close();
-                } else {
-                    const err = await response.json().catch(() => ({}));
-                    tg.showAlert(`Error: ${err.detail || response.statusText}`);
-                    tg.MainButton.setText("SEND SIGNAL");
-                    tg.MainButton.enable();
-                }
-            } catch (err) {
-                tg.showAlert(`Network error: ${err.message}`);
-                tg.MainButton.setText("SEND SIGNAL");
-                tg.MainButton.enable();
-            }
+            tg.sendData(JSON.stringify(payload));
         });
 
         // App Initialization
