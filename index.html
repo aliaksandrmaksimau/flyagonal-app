@@ -16,7 +16,7 @@
             --secondary-bg-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
             --border-color: #e0e0e0;
         }
-        
+
         @media (prefers-color-scheme: dark) {
             :root {
                 --border-color: #333333;
@@ -29,13 +29,13 @@
             color: var(--text-color);
             margin: 0;
             padding: 16px;
-            padding-bottom: 80px; 
+            padding-bottom: 80px;
             box-sizing: border-box;
         }
 
         h2 { margin-top: 0; font-size: 18px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
         h3 { font-size: 16px; margin: 16px 0 8px 0; color: var(--button-color); }
-        
+
         .section {
             background-color: var(--secondary-bg-color);
             border-radius: 10px;
@@ -51,7 +51,7 @@
         }
 
         .col { flex: 1; }
-        
+
         label {
             display: block;
             font-size: 12px;
@@ -70,7 +70,7 @@
             font-size: 14px;
             appearance: none;
         }
-        
+
         input:focus, select:focus {
             outline: none;
             border-color: var(--button-color);
@@ -105,18 +105,27 @@
             cursor: pointer;
             font-weight: bold;
             margin-top: 4px;
+            transition: opacity 0.2s;
+        }
+
+        .add-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            border-style: solid;
+            color: var(--hint-color);
+            border-color: var(--hint-color);
         }
 
         .flex-2 { flex: 2; }
         .flex-3 { flex: 3; }
-        
+
         #history_select {
             background-color: rgba(82, 136, 193, 0.1);
             border-color: var(--button-color);
             color: var(--text-color);
             font-weight: bold;
         }
-        
+
         .reset-btn {
             background-color: transparent;
             color: var(--hint-color);
@@ -146,7 +155,7 @@
             </div>
             <div class="col flex-2">
                 <label>Total Qty</label>
-                <input type="number" id="global_qty" value="3" min="1">
+                <input type="number" id="global_qty" value="3" min="1" step="1">
             </div>
         </div>
     </div>
@@ -160,7 +169,7 @@
             </div>
         </div>
         <div id="legs_A"></div>
-        <button class="add-btn" onclick="addLeg('A')">➕ ADD LEG TO SIDE A</button>
+        <button class="add-btn" id="add-btn-A" onclick="addLeg('A')">➕ ADD LEG TO SIDE A</button>
     </div>
 
     <div class="section" id="section_B">
@@ -172,14 +181,14 @@
             </div>
         </div>
         <div id="legs_B"></div>
-        <button class="add-btn" onclick="addLeg('B')">➕ ADD LEG TO SIDE B</button>
+        <button class="add-btn" id="add-btn-B" onclick="addLeg('B')">➕ ADD LEG TO SIDE B</button>
     </div>
 
     <button class="reset-btn" onclick="resetToDefaults()">Reset to Default Empty Template</button>
 
     <template id="leg-template">
         <div class="leg-container">
-            <button class="remove-leg" onclick="this.parentElement.remove()">✖</button>
+            <button class="remove-leg" onclick="removeLeg(this)">✖</button>
             <div class="row" style="padding-right: 24px;">
                 <div class="col flex-2">
                     <label>Action</label>
@@ -190,7 +199,7 @@
                 </div>
                 <div class="col flex-2">
                     <label>Ratio Qty</label>
-                    <input type="number" class="leg-ratio" value="1" min="1">
+                    <input type="number" class="leg-ratio" value="1" min="1" step="1">
                 </div>
             </div>
             <div class="row">
@@ -207,7 +216,7 @@
                 </div>
                 <div class="col flex-2">
                     <label>Strike</label>
-                    <input type="number" class="leg-strike" step="1" placeholder="...">
+                    <input type="number" class="leg-strike" step="1" min="1" placeholder="...">
                 </div>
             </div>
         </div>
@@ -216,56 +225,69 @@
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        
+
         tg.MainButton.setText("SEND SIGNAL");
         tg.MainButton.show();
 
+        const MAX_LEGS_PER_SIDE = 4;
+
+        function updateAddButton(side) {
+            const container = document.getElementById(`legs_${side}`);
+            const btn = document.getElementById(`add-btn-${side}`);
+            const count = container.querySelectorAll('.leg-container').length;
+            const atMax = count >= MAX_LEGS_PER_SIDE;
+            btn.disabled = atMax;
+            btn.textContent = atMax
+                ? `🚫 MAX ${MAX_LEGS_PER_SIDE} LEGS REACHED FOR SIDE ${side}`
+                : `➕ ADD LEG TO SIDE ${side} (${count}/${MAX_LEGS_PER_SIDE})`;
+        }
+
+        function removeLeg(btn) {
+            const legContainer = btn.parentElement;
+            const legsContainer = legContainer.parentElement;
+            const side = legsContainer.id.split('_')[1];
+            legContainer.remove();
+            updateAddButton(side);
+        }
+
         function addLeg(side, defaultSide = 'BUY', defaultRatio = 1, defaultType = 'C', defaultStrike = '', defaultExp = '') {
             const container = document.getElementById(`legs_${side}`);
+            if (container.querySelectorAll('.leg-container').length >= MAX_LEGS_PER_SIDE) return;
+
             const template = document.getElementById('leg-template').content.cloneNode(true);
-            
+
             template.querySelector('.leg-side').value = defaultSide;
             template.querySelector('.leg-ratio').value = defaultRatio;
             template.querySelector('.leg-type').value = defaultType;
             template.querySelector('.leg-strike').value = defaultStrike;
-            
+
             let expValue = '';
             if (defaultExp) {
                 const parts = defaultExp.split('.');
-                if (parts.length === 3) {
-                    expValue = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                } else {
-                    expValue = defaultExp;
-                }
+                expValue = parts.length === 3
+                    ? `${parts[2]}-${parts[1]}-${parts[0]}`
+                    : defaultExp;
             }
             template.querySelector('.leg-exp').value = expValue;
-            
-            container.appendChild(template);
-        }
 
-        function formatDateForJson(dateStr) {
-            return dateStr || "";
+            container.appendChild(template);
+            updateAddButton(side);
         }
 
         function collectLegs(side) {
             const container = document.getElementById(`legs_${side}`);
-            const legElements = container.querySelectorAll('.leg-container');
-            const legs = [];
             const underlying = document.getElementById('global_underlying').value.toUpperCase().trim();
 
-            legElements.forEach(el => {
-                legs.push({
-                    underlying: underlying,
-                    expiration: formatDateForJson(el.querySelector('.leg-exp').value),
-                    type: el.querySelector('.leg-type').value,
-                    strike: parseFloat(el.querySelector('.leg-strike').value),
-                    ratio_qty: parseInt(el.querySelector('.leg-ratio').value),
-                    side: el.querySelector('.leg-side').value
-                });
-            });
-            return legs;
+            return Array.from(container.querySelectorAll('.leg-container')).map(el => ({
+                underlying,
+                expiration: el.querySelector('.leg-exp').value || '',
+                type: el.querySelector('.leg-type').value,
+                strike: parseFloat(el.querySelector('.leg-strike').value),
+                ratio_qty: parseInt(el.querySelector('.leg-ratio').value, 10),
+                side: el.querySelector('.leg-side').value,
+            }));
         }
-        
+
         function getHistory() {
             try {
                 return JSON.parse(localStorage.getItem('flyagonal_history') || '[]');
@@ -277,22 +299,16 @@
         function saveToHistory(payload) {
             let history = getHistory();
             const underlying = document.getElementById('global_underlying').value.trim().toUpperCase();
-            
+
             const date = new Date();
-            const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-            
-            // Dynamic Qty extraction based on which sides are present
+            const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
             const qty = payload.order_A ? payload.order_A.qty : (payload.order_B ? payload.order_B.qty : 1);
             const label = `${underlying} (Qty: ${qty}) - Sent at ${timeStr}`;
 
-            const historyItem = { label: label, payload: payload };
-            
-            history.unshift(historyItem);
-            
-            if (history.length > 3) {
-                history = history.slice(0, 3);
-            }
-            
+            history.unshift({ label, payload });
+            if (history.length > 3) history = history.slice(0, 3);
+
             localStorage.setItem('flyagonal_history', JSON.stringify(history));
             renderHistoryDropdown();
         }
@@ -301,42 +317,45 @@
             const history = getHistory();
             const section = document.getElementById('history_section');
             const select = document.getElementById('history_select');
-            
+
             if (history.length === 0) {
                 section.style.display = 'none';
                 return;
             }
-            
+
             section.style.display = 'block';
-            select.innerHTML = '<option value="-1">--- Default Empty Template ---</option>';
-            
+
+            while (select.firstChild) select.removeChild(select.firstChild);
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '-1';
+            placeholder.textContent = '--- Default Empty Template ---';
+            select.appendChild(placeholder);
+
             history.forEach((item, index) => {
-                const prefix = index === 0 ? '🟢 LATEST: ' : '🕒 ';
-                select.innerHTML += `<option value="${index}">${prefix}${item.label}</option>`;
+                const opt = document.createElement('option');
+                opt.value = String(index);
+                opt.textContent = `${index === 0 ? '🟢 LATEST: ' : '🕒 '}${item.label}`;
+                select.appendChild(opt);
             });
-            
-            select.value = "0";
+
+            select.value = '0';
         }
 
         function applyHistory(indexStr) {
-            const index = parseInt(indexStr);
+            const index = parseInt(indexStr, 10);
             if (index === -1) {
                 loadDefaults();
                 return;
             }
-            
-            const history = getHistory();
-            const item = history[index];
-            if (item && item.payload) {
-                populateForm(item.payload);
-            }
+            const item = getHistory()[index];
+            if (item && item.payload) populateForm(item.payload);
         }
 
         function populateForm(payload) {
             let globalQty = 1;
             let underlying = 'SPY';
 
-            // Extract globals based on available sides
             if (payload.order_A) {
                 globalQty = payload.order_A.qty;
                 if (payload.order_A.legs && payload.order_A.legs.length > 0) underlying = payload.order_A.legs[0].underlying;
@@ -347,35 +366,26 @@
 
             document.getElementById('global_qty').value = globalQty;
             document.getElementById('global_underlying').value = underlying;
-            
-            // Populate Side A if it exists
-            if (payload.order_A) {
-                document.getElementById('price_A').value = payload.order_A.target_mid_price;
-            } else {
-                document.getElementById('price_A').value = '';
-            }
 
-            // Populate Side B if it exists
-            if (payload.order_B) {
-                document.getElementById('price_B').value = payload.order_B.target_mid_price;
-            } else {
-                document.getElementById('price_B').value = '';
-            }
+            document.getElementById('price_A').value = payload.order_A ? payload.order_A.target_mid_price : '';
+            document.getElementById('price_B').value = payload.order_B ? payload.order_B.target_mid_price : '';
 
             document.getElementById('legs_A').innerHTML = '';
             document.getElementById('legs_B').innerHTML = '';
 
             if (payload.order_A && payload.order_A.legs) {
-                payload.order_A.legs.forEach(leg => {
+                payload.order_A.legs.slice(0, MAX_LEGS_PER_SIDE).forEach(leg => {
                     addLeg('A', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
                 });
             }
-
             if (payload.order_B && payload.order_B.legs) {
-                payload.order_B.legs.forEach(leg => {
+                payload.order_B.legs.slice(0, MAX_LEGS_PER_SIDE).forEach(leg => {
                     addLeg('B', leg.side, leg.ratio_qty, leg.type, leg.strike, leg.expiration);
                 });
             }
+
+            updateAddButton('A');
+            updateAddButton('B');
         }
 
         function loadDefaults() {
@@ -386,53 +396,58 @@
             document.getElementById('legs_A').innerHTML = '';
             document.getElementById('legs_B').innerHTML = '';
 
-            addLeg('A', 'BUY', 1, 'C', '', '');
+            addLeg('A', 'BUY',  1, 'C', '', '');
             addLeg('A', 'SELL', 2, 'C', '', '');
-            addLeg('A', 'BUY', 1, 'C', '', '');
+            addLeg('A', 'BUY',  1, 'C', '', '');
 
             addLeg('B', 'SELL', 1, 'P', '', '');
-            addLeg('B', 'BUY', 1, 'P', '', '');
+            addLeg('B', 'BUY',  1, 'P', '', '');
         }
 
         function resetToDefaults() {
-            if(confirm("Clear current form and restore default empty template?")) {
-                document.getElementById('history_select').value = "-1";
+            tg.showConfirm("Clear current form and restore default empty template?", (confirmed) => {
+                if (!confirmed) return;
+                document.getElementById('history_select').value = '-1';
                 loadDefaults();
-            }
+            });
         }
 
         tg.MainButton.onClick(() => {
             const underlying = document.getElementById('global_underlying').value.trim();
-            const globalQty = parseFloat(document.getElementById('global_qty').value);
-            
-            if (!underlying || isNaN(globalQty)) {
+            const globalQty = parseInt(document.getElementById('global_qty').value, 10);
+
+            if (!underlying || isNaN(globalQty) || globalQty < 1) {
                 tg.showAlert("Please fill in Global Settings properly.");
                 return;
             }
-            
+
             const legsA = collectLegs('A');
             const legsB = collectLegs('B');
 
-            // --- NEW: Dynamic Validation (Allowing just one side) ---
             if (legsA.length === 0 && legsB.length === 0) {
                 tg.showAlert("You must have at least one leg in either Side A or Side B.");
                 return;
             }
 
-            const hasEmptyStrike = [...legsA, ...legsB].some(l => isNaN(l.strike));
-            if (hasEmptyStrike) {
-                tg.showAlert("Please ensure all legs have a valid Strike price.");
+            const allLegs = [...legsA, ...legsB];
+
+            if (allLegs.some(l => isNaN(l.strike) || l.strike <= 0)) {
+                tg.showAlert("Please ensure all legs have a valid positive Strike price.");
                 return;
             }
-            
-            const hasEmptyDate = [...legsA, ...legsB].some(l => !l.expiration || l.expiration.trim() === "");
-            if (hasEmptyDate) {
+
+            const today = new Date().toISOString().slice(0, 10);
+            if (allLegs.some(l => !l.expiration || l.expiration.trim() === '')) {
                 tg.showAlert("Please ensure all legs have a valid Expiration Date selected.");
+                return;
+            }
+            if (allLegs.some(l => l.expiration < today)) {
+                tg.showAlert("One or more legs have an Expiration Date in the past.");
                 return;
             }
 
             const payload = {};
-            
+
             if (legsA.length > 0) {
                 const priceAStr = document.getElementById('price_A').value;
                 if (priceAStr === '') {
@@ -442,10 +457,10 @@
                 payload.order_A = {
                     qty: globalQty,
                     target_mid_price: parseFloat(priceAStr),
-                    legs: legsA
+                    legs: legsA,
                 };
             }
-            
+
             if (legsB.length > 0) {
                 const priceBStr = document.getElementById('price_B').value;
                 if (priceBStr === '') {
@@ -455,7 +470,7 @@
                 payload.order_B = {
                     qty: globalQty,
                     target_mid_price: parseFloat(priceBStr),
-                    legs: legsB
+                    legs: legsB,
                 };
             }
 
@@ -466,7 +481,7 @@
         // App Initialization
         const history = getHistory();
         renderHistoryDropdown();
-        
+
         if (history.length > 0) {
             applyHistory(0);
         } else {
